@@ -13,16 +13,16 @@ import (
 
 var APIKey = flag.String("api_key", "", "PushBullet API key")
 var Regex = flag.String("regex", "", "Regex to notify on")
+var NotifyOnStart = flag.Bool("notify_on_start", true, "Notify at startup")
 
-func notify(p *pushbullet.Client, s string) error {
-	log.Printf("Notifying: %s", s)
+func notify(p *pushbullet.Client, title string, body string) error {
+	log.Printf("Notifying: title=%s body=%s", title, body)
 	devs, err := p.Devices()
 	if err != nil {
 		return err
 	}
 	for _, d := range devs {
-		log.Printf("Pushing to %s: %s", d.Iden, s)
-		p.PushNote(d.Iden, "tail match", s)
+		p.PushNote(d.Iden, title, body)
 		if err != nil {
 			return fmt.Errorf("Could not push to %+v: %v", d, err)
 		}
@@ -43,15 +43,20 @@ func main() {
 	}
 	re := regexp.MustCompile(*Regex)
 	p := pushbullet.New(*APIKey)
+	target := flag.Args()[0]
 
-	t, err := tail.TailFile(flag.Args()[0], tail.Config{Follow: true})
+	if *NotifyOnStart {
+		notify(p, fmt.Sprintf("tail-pushbullet now watching %s", target), fmt.Sprintf("Regex: %s", *Regex))
+	}
+
+	t, err := tail.TailFile(target, tail.Config{Follow: true})
 	if err != nil {
 		panic(fmt.Sprintf("TailFile: %v", err))
 	}
 	for line := range t.Lines {
 		log.Printf("%s", line.Text)
 		if re.MatchString(line.Text) {
-			notify(p, line.Text)
+			notify(p, fmt.Sprintf("%s matched %s", target, *Regex), line.Text)
 		}
 	}
 }
